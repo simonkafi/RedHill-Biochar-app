@@ -680,7 +680,8 @@
       <div class="section-header">Sync status</div>
       <div id="sync-counts" style="font-size:13px;color:var(--smoke);padding:6px 0">Loading...</div>
     </div>
-    <button class="btn btn-secondary" onclick="syncNow()" style="margin-top:8px">Sync all records now</button>
+    <button class="btn btn-secondary" onclick="syncNow()" style="margin-top:8px">☁️ Sync all records now</button>
+    <button class="btn btn-secondary" onclick="resetAndSync()" style="margin-top:8px;border-color:#f5c4b3;color:#993c1d">🔄 Force re-sync all records</button>
   </div>
   <div class="card">
     <div class="card-title">Export as CSV</div>
@@ -1402,40 +1403,50 @@ async function syncNow(){
   const statusEl=document.getElementById('sync-counts');
   if(btn){btn.disabled=true;btn.textContent='⏳ Syncing...';}
 
-  // Google Apps Script requires sending as form data to avoid CORS preflight
-  async function sendRecord(type, data){
-    const body = new FormData();
-    body.append('payload', JSON.stringify({type, data}));
-    // Use no-cors — response will be opaque but record will be saved
-    await fetch(url, {method:'POST', body});
-    return true;
+  async function sendRecord(type,data){
+    const payload=encodeURIComponent(JSON.stringify({type,data}));
+    const r=await fetch(url+'?payload='+payload,{method:'GET',redirect:'follow'});
+    const text=await r.text();
+    try{
+      const json=JSON.parse(text);
+      if(json.error) throw new Error(json.error);
+      return json;
+    }catch(e){ throw new Error(text.substring(0,100)); }
   }
 
-  let ok=0, fail=0;
+  let ok=0,fail=0,lastErr='';
   const farmers=DB.farmers;
   for(let i=0;i<farmers.length;i++){
     if(farmers[i].synced) continue;
-    try{
-      await sendRecord('farmer', farmers[i]);
-      farmers[i].synced=true; ok++;
-    }catch(e){fail++;}
+    try{ await sendRecord('farmer',farmers[i]); farmers[i].synced=true; ok++; }
+    catch(e){ fail++; lastErr=e.message; }
   }
   DB.farmers=farmers;
 
   const cols=DB.collections;
   for(let i=0;i<cols.length;i++){
     if(cols[i].synced) continue;
-    try{
-      await sendRecord('collection', cols[i]);
-      cols[i].synced=true; ok++;
-    }catch(e){fail++;}
+    try{ await sendRecord('collection',cols[i]); cols[i].synced=true; ok++; }
+    catch(e){ fail++; lastErr=e.message; }
   }
   DB.collections=cols;
 
   if(btn){btn.disabled=false;btn.textContent='☁️ Sync all records now';}
   updateSyncCounts();
   updateDashboard();
-  toast(ok+' record'+(ok!==1?'s':'')+' sent to Sheets ✅'+(fail?' · '+fail+' failed':''));
+  if(statusEl && lastErr) statusEl.innerHTML+='<br><span style="color:#c0392b;font-size:12px">Error: '+lastErr+'</span>';
+  toast(ok>0?ok+' record'+(ok!==1?'s':'')+' synced ✅':(fail>0?'❌ '+lastErr:'Nothing to sync'));
+}
+
+function resetAndSync(){
+  if(!confirm('This will mark all records as unsynced and send them all to Google Sheets. Continue?')) return;
+  const farmers=DB.farmers.map(f=>({...f,synced:false}));
+  DB.farmers=farmers;
+  const cols=DB.collections.map(c=>({...c,synced:false}));
+  DB.collections=cols;
+  updateSyncCounts();
+  toast('All records marked for re-sync...');
+  setTimeout(syncNow, 500);
 }
 
 function exportCSV(type){
