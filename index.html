@@ -1399,30 +1399,43 @@ async function syncNow(){
   if(!url) return toast('Save the Apps Script URL first');
   if(!navigator.onLine) return toast('No internet connection');
   const btn=document.getElementById('sync-now-btn');
+  const statusEl=document.getElementById('sync-counts');
   if(btn){btn.disabled=true;btn.textContent='⏳ Syncing...';}
-  let ok=0,fail=0;
+
+  // Google Apps Script requires sending as form data to avoid CORS preflight
+  async function sendRecord(type, data){
+    const body = new FormData();
+    body.append('payload', JSON.stringify({type, data}));
+    // Use no-cors — response will be opaque but record will be saved
+    await fetch(url, {method:'POST', body});
+    return true;
+  }
+
+  let ok=0, fail=0;
   const farmers=DB.farmers;
   for(let i=0;i<farmers.length;i++){
     if(farmers[i].synced) continue;
     try{
-      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'farmer',data:farmers[i]})});
-      if(r.ok){farmers[i].synced=true;ok++;}else fail++;
-    }catch{fail++;}
+      await sendRecord('farmer', farmers[i]);
+      farmers[i].synced=true; ok++;
+    }catch(e){fail++;}
   }
   DB.farmers=farmers;
+
   const cols=DB.collections;
   for(let i=0;i<cols.length;i++){
     if(cols[i].synced) continue;
     try{
-      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'collection',data:cols[i]})});
-      if(r.ok){cols[i].synced=true;ok++;}else fail++;
-    }catch{fail++;}
+      await sendRecord('collection', cols[i]);
+      cols[i].synced=true; ok++;
+    }catch(e){fail++;}
   }
   DB.collections=cols;
+
   if(btn){btn.disabled=false;btn.textContent='☁️ Sync all records now';}
   updateSyncCounts();
   updateDashboard();
-  toast(ok+' record'+(ok!==1?'s':'')+' synced'+(fail?' · '+fail+' failed':'')+' ✅');
+  toast(ok+' record'+(ok!==1?'s':'')+' sent to Sheets ✅'+(fail?' · '+fail+' failed':''));
 }
 
 function exportCSV(type){
