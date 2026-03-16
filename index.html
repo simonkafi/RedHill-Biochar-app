@@ -1477,27 +1477,6 @@ async function syncNow(){
   if(btn){btn.disabled=true;btn.textContent='⏳ Syncing...';}
   let ok=0,fail=0,lastErr='';
 
-  // First test: verify URL is reachable and returns correct response
-  try{
-    const test=await fetch(url,{method:'GET',redirect:'follow'});
-    const txt=await test.text();
-    const j=JSON.parse(txt);
-    if(!j.status||j.status!=='ok'){
-      if(btn){btn.disabled=false;btn.textContent='☁️ Sync all records now';}
-      if(statusEl) statusEl.innerHTML='<span style="color:#c0392b">❌ Script not responding correctly: '+txt.substring(0,80)+'</span>';
-      return toast('❌ Script error — see Sync tab');
-    }
-    if(!j.project||!j.project.includes('FINAL')){
-      if(btn){btn.disabled=false;btn.textContent='☁️ Sync all records now';}
-      if(statusEl) statusEl.innerHTML='<span style="color:#e67e22">⚠️ Old script still running ('+j.project+'). Please deploy new version.</span>';
-      return toast('⚠️ Old script — redeploy new version');
-    }
-  }catch(e){
-    if(btn){btn.disabled=false;btn.textContent='☁️ Sync all records now';}
-    if(statusEl) statusEl.innerHTML='<span style="color:#c0392b">❌ Cannot reach URL: '+e.message+'</span>';
-    return toast('❌ Cannot reach script URL');
-  }
-
   const farmers=DB.farmers;
   for(let i=0;i<farmers.length;i++){
     if(farmers[i].synced) continue;
