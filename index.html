@@ -323,7 +323,7 @@
 
       <div class="form-group">
         <label class="form-label">Primary crop <span class="sw">Zao kuu</span></label>
-        <select class="form-select" id="r-crop">
+        <select class="form-select" id="r-crop" onchange="updateWasteFromCrops()">
           <option value="">Select primary crop</option>
           <optgroup label="★ High biochar potential (Kiambu highlands)">
             <option>Coffee (Kahawa) ★</option>
@@ -363,7 +363,7 @@
 
       <div class="form-group">
         <label class="form-label">Secondary crop (optional) <span class="sw">Zao la pili</span></label>
-        <select class="form-select" id="r-crop2">
+        <select class="form-select" id="r-crop2" onchange="updateWasteFromCrops()">
           <option value="">None / not applicable</option>
           <optgroup label="★ High biochar potential">
             <option>Coffee (Kahawa) ★</option>
@@ -436,56 +436,23 @@
 
       <div class="form-group">
         <label class="form-label">Primary waste type <span class="sw">Taka kuu</span></label>
-        <select class="form-select" id="r-waste-type">
-          <option value="">Select waste type</option>
-          <optgroup label="★ Excellent biochar feedstock">
-            <option>Coffee husks / pulp (Makapi ya kahawa) ★</option>
-            <option>Maize cobs & stalks (Makuyu/mashina ya mahindi) ★</option>
-            <option>Sugarcane bagasse (Mashujo ya miwa) ★</option>
-            <option>Tea prunings (Matawi ya chai) ★</option>
-            <option>Eucalyptus prunings / chips ★</option>
-            <option>Wattle / grevillea trimmings ★</option>
-            <option>Bamboo waste ★</option>
-          </optgroup>
-          <optgroup label="Good feedstock">
-            <option>Crop stalks — mixed (Mashina ya mazao)</option>
-            <option>Macadamia husks</option>
-            <option>Rice husks (Makapi ya mchele)</option>
-            <option>Banana stems / leaves (Mashina ya ndizi)</option>
-            <option>Wood chips / sawdust (Vumbi la mbao)</option>
-          </optgroup>
-          <optgroup label="Other">
-            <option>Mixed agricultural waste</option>
-            <option>Other — specify in notes</option>
-          </optgroup>
+        <div id="waste-hint" style="display:none;font-size:11px;color:var(--earth);background:var(--earth-pale);border-radius:var(--radius-sm);padding:7px 10px;margin-bottom:6px"></div>
+        <select class="form-select" id="r-waste-type" onchange="toggleOtherWaste()">
+          <option value="">Select crop first to see suggested waste</option>
         </select>
+        <div id="r-waste-other-wrap" style="display:none;margin-top:6px">
+          <input class="form-input" id="r-waste-other" placeholder="Describe your waste type..." style="font-size:13px">
+        </div>
       </div>
 
       <div class="form-group">
         <label class="form-label">Secondary waste type (optional) <span class="sw">Taka ya pili</span></label>
-        <select class="form-select" id="r-waste-type2">
+        <select class="form-select" id="r-waste-type2" onchange="toggleOtherWaste()">
           <option value="">None / not applicable</option>
-          <optgroup label="★ Excellent biochar feedstock">
-            <option>Coffee husks / pulp ★</option>
-            <option>Maize cobs & stalks ★</option>
-            <option>Sugarcane bagasse ★</option>
-            <option>Tea prunings ★</option>
-            <option>Eucalyptus prunings / chips ★</option>
-            <option>Wattle / grevillea trimmings ★</option>
-            <option>Bamboo waste ★</option>
-          </optgroup>
-          <optgroup label="Good feedstock">
-            <option>Crop stalks — mixed</option>
-            <option>Macadamia husks</option>
-            <option>Rice husks</option>
-            <option>Banana stems / leaves</option>
-            <option>Wood chips / sawdust</option>
-          </optgroup>
-          <optgroup label="Other">
-            <option>Mixed agricultural waste</option>
-            <option>Other</option>
-          </optgroup>
         </select>
+        <div id="r-waste2-other-wrap" style="display:none;margin-top:6px">
+          <input class="form-input" id="r-waste2-other" placeholder="Describe secondary waste type..." style="font-size:13px">
+        </div>
       </div>
 
       <div class="form-group">
@@ -817,6 +784,7 @@ function init(){
   buildCountyCodes();
   buildCounty();
   buildMonthPicker();
+  updateWasteFromCrops(); // initialise with default waste options
   updateDashboard();
   updateOnlineStatus();
   renderCollectionHistory();
@@ -861,6 +829,165 @@ function populateSubcounty(){
 }
 
 function populateWard(){ /* ward is free text */ }
+
+// ══════════════════════════════════
+// CROP → WASTE MAPPING
+// ══════════════════════════════════
+const CROP_WASTE_MAP = {
+  'Coffee (Kahawa) ★': {
+    label: 'Coffee produces husks, pulp and prunings — all excellent biochar feedstock',
+    primary: ['Coffee husks / pulp (Makapi ya kahawa) ★','Coffee prunings & stems ★','Mixed agricultural waste'],
+    secondary: ['Wood chips / sawdust (Vumbi la mbao)','Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Tea (Chai) ★': {
+    label: 'Tea prunings are harvested regularly — consistent, high-quality biochar feedstock',
+    primary: ['Tea prunings (Matawi ya chai) ★','Tea stems & woody waste ★','Mixed agricultural waste'],
+    secondary: ['Wood chips / sawdust (Vumbi la mbao)','Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Macadamia ★': {
+    label: 'Macadamia shells have very high carbon content — premium biochar quality',
+    primary: ['Macadamia husks & shells ★','Macadamia prunings ★','Mixed agricultural waste'],
+    secondary: ['Wood chips / sawdust (Vumbi la mbao)','Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Sugarcane (Miwa) ★': {
+    label: 'Sugarcane bagasse is high-cellulose — excellent biochar yield',
+    primary: ['Sugarcane bagasse (Mashujo ya miwa) ★','Sugarcane tops & leaves ★','Mixed agricultural waste'],
+    secondary: ['Crop stalks — mixed (Mashina ya mazao)','Wood chips / sawdust (Vumbi la mbao)','Other — not listed']
+  },
+  'Maize (Mahindi) ★': {
+    label: 'Maize cobs and stalks are the most abundant biochar feedstock in Kenya',
+    primary: ['Maize cobs & stalks (Makuyu/mashina ya mahindi) ★','Maize husks ★','Mixed agricultural waste'],
+    secondary: ['Crop stalks — mixed (Mashina ya mazao)','Wood chips / sawdust (Vumbi la mbao)','Other — not listed']
+  },
+  'Eucalyptus (Mrigo) ★': {
+    label: 'Eucalyptus is a dense hardwood — high pyrolysis tolerance and excellent biochar',
+    primary: ['Eucalyptus prunings / chips ★','Eucalyptus bark & offcuts ★','Wood chips / sawdust (Vumbi la mbao)'],
+    secondary: ['Mixed agricultural waste','Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Grevillea ★': {
+    label: 'Grevillea prunings are common in Kiambu agroforestry — proven biochar feedstock',
+    primary: ['Wattle / grevillea trimmings ★','Wood chips / sawdust (Vumbi la mbao)','Mixed agricultural waste'],
+    secondary: ['Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Wattle (Mchongoma) ★': {
+    label: 'Wattle thinnings produce high-quality charcoal and biochar',
+    primary: ['Wattle / grevillea trimmings ★','Wood chips / sawdust (Vumbi la mbao)','Mixed agricultural waste'],
+    secondary: ['Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Bamboo ★': {
+    label: 'Bamboo culm waste has exceptional fixed carbon — among the best biochar feedstocks',
+    primary: ['Bamboo waste ★','Bamboo chips & offcuts ★','Mixed agricultural waste'],
+    secondary: ['Wood chips / sawdust (Vumbi la mbao)','Other — not listed']
+  },
+  'Casuarina ★': {
+    label: 'Casuarina prunings produce dense, high-quality biochar',
+    primary: ['Wood chips / sawdust (Vumbi la mbao)','Casuarina prunings ★','Mixed agricultural waste'],
+    secondary: ['Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Banana (Ndizi)': {
+    label: 'Banana stems and leaves are good feedstock — moderate biochar quality',
+    primary: ['Banana stems / leaves (Mashina ya ndizi)','Mixed agricultural waste','Crop stalks — mixed (Mashina ya mazao)'],
+    secondary: ['Wood chips / sawdust (Vumbi la mbao)','Other — not listed']
+  },
+  'Beans (Maharagwe)': {
+    label: 'Bean stalks are moderate feedstock — best mixed with higher-carbon waste',
+    primary: ['Crop stalks — mixed (Mashina ya mazao)','Mixed agricultural waste'],
+    secondary: ['Wood chips / sawdust (Vumbi la mbao)','Other — not listed']
+  },
+  'Sorghum (Mtama)': {
+    label: 'Sorghum stalks are good biochar feedstock, similar to maize',
+    primary: ['Crop stalks — mixed (Mashina ya mazao)','Maize cobs & stalks (Makuyu/mashina ya mahindi) ★','Mixed agricultural waste'],
+    secondary: ['Wood chips / sawdust (Vumbi la mbao)','Other — not listed']
+  },
+  'Indigenous forest (Msitu wa asili)': {
+    label: 'Forest prunings and deadwood — quality varies by species',
+    primary: ['Wood chips / sawdust (Vumbi la mbao)','Mixed agricultural waste'],
+    secondary: ['Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  },
+  'Mixed trees': {
+    label: 'Mixed tree prunings — good feedstock when dried properly',
+    primary: ['Wood chips / sawdust (Vumbi la mbao)','Wattle / grevillea trimmings ★','Mixed agricultural waste'],
+    secondary: ['Crop stalks — mixed (Mashina ya mazao)','Other — not listed']
+  }
+};
+
+// Default waste options when crop has no specific mapping
+const DEFAULT_WASTE = {
+  primary: ['Crop stalks — mixed (Mashina ya mazao)','Mixed agricultural waste','Wood chips / sawdust (Vumbi la mbao)',
+    'Coffee husks / pulp (Makapi ya kahawa) ★','Maize cobs & stalks (Makuyu/mashina ya mahindi) ★',
+    'Tea prunings (Matawi ya chai) ★','Sugarcane bagasse (Mashujo ya miwa) ★',
+    'Eucalyptus prunings / chips ★','Wattle / grevillea trimmings ★','Bamboo waste ★',
+    'Macadamia husks & shells ★','Banana stems / leaves (Mashina ya ndizi)',
+    'Rice husks (Makapi ya mchele)','Other — not listed'],
+  secondary: ['None / not applicable','Crop stalks — mixed (Mashina ya mazao)','Mixed agricultural waste',
+    'Wood chips / sawdust (Vumbi la mbao)','Coffee husks / pulp (Makapi ya kahawa) ★',
+    'Maize cobs & stalks (Makuyu/mashina ya mahindi) ★','Tea prunings (Matawi ya chai) ★',
+    'Eucalyptus prunings / chips ★','Wattle / grevillea trimmings ★','Bamboo waste ★',
+    'Macadamia husks & shells ★','Banana stems / leaves (Mashina ya ndizi)',
+    'Rice husks (Makapi ya mchele)','Other — not listed']
+};
+
+function updateWasteFromCrops(){
+  const crop1 = document.getElementById('r-crop').value;
+  const crop2 = document.getElementById('r-crop2').value;
+
+  // Pick the best mapping — primary crop first, fallback to secondary, fallback to default
+  const strippedCrop1 = Object.keys(CROP_WASTE_MAP).find(k => crop1.includes(k.replace(' ★','')));
+  const strippedCrop2 = Object.keys(CROP_WASTE_MAP).find(k => crop2.includes(k.replace(' ★','')));
+  const mapping = CROP_WASTE_MAP[strippedCrop1] || CROP_WASTE_MAP[strippedCrop2] || null;
+
+  const hint = document.getElementById('waste-hint');
+  const sel1 = document.getElementById('r-waste-type');
+  const sel2 = document.getElementById('r-waste-type2');
+
+  // Show hint
+  if(mapping && mapping.label){
+    hint.style.display='block';
+    hint.textContent='💡 '+mapping.label;
+  } else {
+    hint.style.display='none';
+  }
+
+  const prev1 = sel1.value;
+  const prev2 = sel2.value;
+
+  // Build primary waste options
+  const primaryList = mapping ? mapping.primary : DEFAULT_WASTE.primary;
+  sel1.innerHTML = '<option value="">Select primary waste type</option>';
+  primaryList.forEach(w=>{
+    const opt=document.createElement('option');
+    opt.value=w; opt.textContent=w;
+    sel1.appendChild(opt);
+  });
+  // Always add Other at end
+  if(!primaryList.includes('Other — not listed')){
+    const opt=document.createElement('option'); opt.value='Other — not listed'; opt.textContent='Other — not listed'; sel1.appendChild(opt);
+  }
+  if(prev1) sel1.value=prev1;
+
+  // Build secondary waste options
+  const secondaryList = mapping ? ['None / not applicable',...mapping.secondary] : DEFAULT_WASTE.secondary;
+  sel2.innerHTML='';
+  secondaryList.forEach(w=>{
+    const opt=document.createElement('option');
+    opt.value=w; opt.textContent=w;
+    sel2.appendChild(opt);
+  });
+  if(!secondaryList.includes('Other — not listed')){
+    const opt=document.createElement('option'); opt.value='Other — not listed'; opt.textContent='Other — not listed'; sel2.appendChild(opt);
+  }
+  if(prev2) sel2.value=prev2;
+
+  // Show/hide "other" text inputs
+  toggleOtherWaste();
+}
+
+function toggleOtherWaste(){
+  const v1=document.getElementById('r-waste-type').value;
+  const v2=document.getElementById('r-waste-type2').value;
+  document.getElementById('r-waste-other-wrap').style.display=(v1==='Other — not listed')?'block':'none';
+  document.getElementById('r-waste2-other-wrap').style.display=(v2==='Other — not listed')?'block':'none';
+}
 
 // ══════════════════════════════════
 // MONTH PICKER
@@ -1007,8 +1134,12 @@ function submitRegistration(){
     secondaryCrop:document.getElementById('r-crop2').value,
     farmingStyle:document.getElementById('r-farming-style').value,
     gps:document.getElementById('r-gps').value,
-    primaryWaste:document.getElementById('r-waste-type').value,
-    secondaryWaste:document.getElementById('r-waste-type2').value,
+    primaryWaste:(document.getElementById('r-waste-type').value==='Other — not listed'
+      ? (document.getElementById('r-waste-other').value.trim()||'Other')
+      : document.getElementById('r-waste-type').value),
+    secondaryWaste:(document.getElementById('r-waste-type2').value==='Other — not listed'
+      ? (document.getElementById('r-waste2-other').value.trim()||'Other')
+      : document.getElementById('r-waste-type2').value),
     wasteDisposal:document.getElementById('r-disposal').value,
     wasteVolume:parseFloat(document.getElementById('r-waste-vol').value)||0,
     wasteUnit:document.getElementById('r-waste-unit').value,
@@ -1043,7 +1174,12 @@ function resetRegForm(){
   selMonths.clear();
   buildMonthPicker();
   document.getElementById('r-country-code').value='+254';
+  document.getElementById('r-waste-other').value='';
+  document.getElementById('r-waste2-other').value='';
+  document.getElementById('r-waste-other-wrap').style.display='none';
+  document.getElementById('r-waste2-other-wrap').style.display='none';
   buildCounty();
+  updateWasteFromCrops();
 }
 
 // ══════════════════════════════════
