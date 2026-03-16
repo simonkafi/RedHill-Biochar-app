@@ -1379,7 +1379,7 @@ function saveSheetUrl(){
   const url=document.getElementById('sheet-url').value.trim();
   if(!url) return toast('Paste the Apps Script URL first');
   localStorage.setItem('rh_sheet_url',url);
-  toast('✅ URL saved — sync is now active');
+  toast('✅ URL saved');
   updateSyncCounts();
 }
 
@@ -1387,99 +1387,91 @@ function updateSyncCounts(){
   const urlInput=document.getElementById('sheet-url');
   const saved=localStorage.getItem('rh_sheet_url')||'';
   if(urlInput && saved) urlInput.value=saved;
-  const farmers=DB.farmers;
-  const cols=DB.collections;
-  const uf=farmers.filter(f=>!f.synced).length;
-  const uc=cols.filter(c=>!c.synced).length;
+  const uf=DB.farmers.filter(f=>!f.synced).length;
+  const uc=DB.collections.filter(c=>!c.synced).length;
   const el=document.getElementById('sync-counts');
   if(!el) return;
   if(!saved){el.textContent='No URL configured yet.';return}
-  el.innerHTML=`URL configured ✅<br>${uf} farmer record${uf!==1?'s':''} pending · ${uc} collection record${uc!==1?'s':''} pending`;
+  el.innerHTML='URL configured ✅<br>'+uf+' farmer record'+(uf!==1?'s':'')+' pending · '+uc+' collection record'+(uc!==1?'s':'')+' pending';
 }
 
+// Core send function — GET with payload to avoid CORS completely
+async function sendToSheets(type, data){
+  const url=localStorage.getItem('rh_sheet_url');
+  if(!url) return false;
+  // Exclude large photo data from sync payload
+  const d={...data};
+  delete d.photoData;
+  const payload=encodeURIComponent(JSON.stringify({type,data:d}));
+  const r=await fetch(url+'?payload='+payload,{method:'GET',redirect:'follow'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const text=await r.text();
+  const json=JSON.parse(text);
+  if(!json.success) throw new Error(json.error||'Script returned failure');
+  return true;
+}
+
+// Auto-sync silently after saving a record (only if online)
+async function autoSync(){
+  const url=localStorage.getItem('rh_sheet_url');
+  if(!url||!navigator.onLine) return;
+  try{
+    const farmers=DB.farmers;
+    let changed=false;
+    for(let i=0;i<farmers.length;i++){
+      if(farmers[i].synced) continue;
+      try{ await sendToSheets('farmer',farmers[i]); farmers[i].synced=true; changed=true; }catch(e){}
+    }
+    if(changed) DB.farmers=farmers;
+
+    const cols=DB.collections;
+    let changedC=false;
+    for(let i=0;i<cols.length;i++){
+      if(cols[i].synced) continue;
+      try{ await sendToSheets('collection',cols[i]); cols[i].synced=true; changedC=true; }catch(e){}
+    }
+    if(changedC) DB.collections=cols;
+
+    if(changed||changedC){ updateDashboard(); renderFarmerList(); updateSyncCounts(); }
+  }catch(e){}
+}
+
+// Manual sync with visible feedback
 async function syncNow(){
   const url=localStorage.getItem('rh_sheet_url');
   if(!url) return toast('Save the Apps Script URL first');
   if(!navigator.onLine) return toast('No internet connection');
-  const btn=document.getElementById('sync-now-btn');
-  const statusEl=document.getElementById('sync-counts');
+  const btn=document.querySelector('[onclick="syncNow()"]');
   if(btn){btn.disabled=true;btn.textContent='⏳ Syncing...';}
-
-  async function sendRecord(type,data){
-    // Use no-cors POST — data is saved by Apps Script, response is opaque (that's fine)
-    await fetch(url, {
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({type, data})
-    });
-    // With no-cors we can't read the response, so assume success
-    return {success:true};
-  }
-
-  let ok=0,fail=0,lastErr='';
+  let ok=0,fail=0;
   const farmers=DB.farmers;
   for(let i=0;i<farmers.length;i++){
     if(farmers[i].synced) continue;
-    try{ await sendRecord('farmer',farmers[i]); farmers[i].synced=true; ok++; }
-    catch(e){ fail++; lastErr=e.message; }
+    try{ await sendToSheets('farmer',farmers[i]); farmers[i].synced=true; ok++; }
+    catch(e){ fail++; }
   }
   DB.farmers=farmers;
-
   const cols=DB.collections;
   for(let i=0;i<cols.length;i++){
     if(cols[i].synced) continue;
-    try{ await sendRecord('collection',cols[i]); cols[i].synced=true; ok++; }
-    catch(e){ fail++; lastErr=e.message; }
+    try{ await sendToSheets('collection',cols[i]); cols[i].synced=true; ok++; }
+    catch(e){ fail++; }
   }
   DB.collections=cols;
-
   if(btn){btn.disabled=false;btn.textContent='☁️ Sync all records now';}
-  updateSyncCounts();
-  updateDashboard();
-  if(statusEl && lastErr) statusEl.innerHTML+='<br><span style="color:#c0392b;font-size:12px">Error: '+lastErr+'</span>';
-  toast(ok>0?ok+' record'+(ok!==1?'s':'')+' synced ✅':(fail>0?'❌ '+lastErr:'Nothing to sync'));
+  updateSyncCounts(); updateDashboard(); renderFarmerList();
+  if(ok>0) toast(ok+' record'+(ok!==1?'s':'')+' synced to Sheets ✅');
+  else if(fail>0) toast('❌ Sync failed — check URL and internet');
+  else toast('All records already synced ✅');
 }
 
+// Force re-sync — resets all flags and pushes everything again
 function resetAndSync(){
-  if(!confirm('This will mark all records as unsynced and send them all to Google Sheets. Continue?')) return;
-  const farmers=DB.farmers.map(f=>({...f,synced:false}));
-  DB.farmers=farmers;
-  const cols=DB.collections.map(c=>({...c,synced:false}));
-  DB.collections=cols;
+  if(!confirm('Re-send all records to Google Sheets?')) return;
+  DB.farmers=DB.farmers.map(f=>({...f,synced:false}));
+  DB.collections=DB.collections.map(c=>({...c,synced:false}));
   updateSyncCounts();
-  toast('All records marked for re-sync...');
-  setTimeout(syncNow, 500);
-}
-
-// Auto-sync in background when a record is saved
-async function autoSync(){
-  const url=localStorage.getItem('rh_sheet_url');
-  if(!url || !navigator.onLine) return; // Silent — no toast if not configured or offline
-  try{
-    const farmers=DB.farmers;
-    for(let i=0;i<farmers.length;i++){
-      if(farmers[i].synced) continue;
-      const payload=encodeURIComponent(JSON.stringify({type:'farmer',data:farmers[i]}));
-      const r=await fetch(url+'?payload='+payload,{method:'GET',redirect:'follow'});
-      const json=JSON.parse(await r.text());
-      if(json.success){farmers[i].synced=true;}
-    }
-    DB.farmers=farmers;
-    const cols=DB.collections;
-    for(let i=0;i<cols.length;i++){
-      if(cols[i].synced) continue;
-      const payload=encodeURIComponent(JSON.stringify({type:'collection',data:cols[i]}));
-      const r=await fetch(url+'?payload='+payload,{method:'GET',redirect:'follow'});
-      const json=JSON.parse(await r.text());
-      if(json.success){cols[i].synced=true;}
-    }
-    DB.collections=cols;
-    updateDashboard();
-    renderFarmerList();
-  }catch(e){
-    // Silent fail — agent can manually sync later
-  }
+  setTimeout(syncNow,300);
 }
 
 function exportCSV(type){
